@@ -1,0 +1,56 @@
+# Thoma — local GGUF on Apple Silicon 16GB+ (Metal via llama-cpp-python)
+# No Ollama required. Download: python scripts/download-gguf.py
+
+hardware:
+  backend: mps
+  platform: apple-silicon
+  unified_memory_gb: 16
+  accelerator: metal
+  inference: llamacpp
+  max_loaded_models: 1
+  default_context: 8192
+
+profiles:
+  thoma-reason:
+    description: "Thinking — Qwen3 8B GGUF"
+    model_file: "Qwen3-8B-Q4_K_M.gguf"
+    thinking: true
+    context_length: 8192
+    memory_estimate_gb: "5.0-6.5"
+
+  # thoma-reason-distill:
+  #   description: "DeepSeek R1 distill 7B"
+  #   model_file: "deepseek-r1-distill-qwen-7b-q4_k_m.gguf"
+  #   thinking: true
+  #   context_length: 8192
+  #   memory_estimate_gb: "4.5-5.5"
+
+  thoma-code:
+    description: "Code — Qwen2.5 Coder 7B GGUF"
+    model_file: "qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+    thinking: false
+    context_length: 8192
+    memory_estimate_gb: "4.5-5.5"
+
+  thoma-fast:
+    description: "Fast — Qwen3 4B"
+    model_file: "Qwen3-4B-Q4_K_M.gguf"
+    thinking: false
+    context_length: 8192
+    memory_estimate_gb: "2.5-3.5"
+
+  thoma-reason-lite:
+    description: "Fallback — Coder 3B"
+    model_file: "qwen2.5-coder-3b-instruct-q4_k_m.gguf"
+    thinking: false
+    context_length: 4096
+    memory_estimate_gb: "2.0-2.5"
+
+default_profile: thoma-reason
+
+download_files:
+  - Qwen3-8B-Q4_K_M.gguf
+  - qwen2.5-coder-7b-instruct-q4_k_m.gguf
+  # - deepseek-r1-distill-qwen-7b-q4_k_m.gguf
+  - Qwen3-4B-Q4_K_M.gguf
+  - qwen2.5-coder-3b-instruct-q4_k_m.gguf

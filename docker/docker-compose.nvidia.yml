@@ -1,0 +1,17 @@
+# Overlay for NVIDIA CUDA GPUs (RTX 4050, etc.)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
+services:
+  ollama:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  thoma-api:
+    environment:
+      - THOMA_BACKEND=nvidia
