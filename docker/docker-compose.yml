@@ -1,0 +1,46 @@
+# Thoma base stack — Ollama + API (CPU/default; add nvidia overlay for CUDA)
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: thoma-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-4096}
+      - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
+      - OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV_CACHE_TYPE:-q8_0}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-5m}
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  thoma-api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: thoma-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - THOMA_API_HOST=${THOMA_API_HOST:-0.0.0.0}
+      - THOMA_API_PORT=${THOMA_API_PORT:-8080}
+      - THOMA_BACKEND=${THOMA_BACKEND:-docker}
+      - THOMA_DEFAULT_PROFILE=${THOMA_DEFAULT_PROFILE:-thoma-reason}
+      - THOMA_MODELS_CONFIG=${THOMA_MODELS_CONFIG:-/app/config/models-6gb.yaml}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+    volumes:
+      - ../config:/app/config:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama_data:

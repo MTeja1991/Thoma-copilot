@@ -1,0 +1,20 @@
+# Minimal smoke test — single small model already on disk
+hardware:
+  backend: mps
+  platform: apple-silicon
+  unified_memory_gb: 16
+  accelerator: metal
+  inference: llamacpp
+
+profiles:
+  thoma-fast:
+    description: "Code — Qwen2.5 Coder 7B GGUF"
+    model_file: "qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+    thinking: false
+    context_length: 8192
+    memory_estimate_gb: "4.5-5.5"
+
+default_profile: thoma-fast
+
+download_files:
+  - qwen2.5-coder-7b-instruct-q4_k_m.gguf

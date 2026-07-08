@@ -1,0 +1,72 @@
+# Thoma model profiles — RTX 4050 6 GB VRAM
+
+# Operational rules:
+#   - Load ONE profile at a time (OLLAMA_MAX_LOADED_MODELS=1)
+#   - Use context_length from profile (lower for 7b stretch)
+#   - Run: docker/scripts/pull-models.sh
+
+hardware:
+  backend: cuda
+  gpu: "NVIDIA RTX 4050"
+  vram_gb: 6
+  max_loaded_models: 1
+  default_context: 4096
+
+profiles:
+  thoma-reason:
+    description: "Primary thinking model — planning, debugging, agent"
+    ollama_model: "qwen3:4b"
+    thinking: true
+    context_length: 4096
+    vram_estimate_gb: "2.5-3.5"
+    priority: primary
+
+  thoma-code:
+    description: "Code generation and refactoring"
+    ollama_model: "qwen2.5-coder:3b"
+    thinking: false
+    context_length: 4096
+    vram_estimate_gb: "2.0-2.5"
+    priority: primary
+
+  thoma-fast:
+    description: "Quick chat and summaries"
+    ollama_model: "qwen2.5:3b"
+    thinking: false
+    context_length: 4096
+    vram_estimate_gb: "2.0-2.5"
+    priority: primary
+
+  thoma-reason-lite:
+    description: "Lightweight visible chain-of-thought"
+    ollama_model: "deepseek-r1:1.5b"
+    thinking: true
+    context_length: 4096
+    vram_estimate_gb: "1.2-1.8"
+    priority: fallback
+
+# Stretch — may OOM; use 2048 context only
+stretch_profiles:
+  thoma-code-7b:
+    description: "Better code quality; tight on 6GB"
+    ollama_model: "qwen2.5-coder:7b"
+    thinking: false
+    context_length: 2048
+    vram_estimate_gb: "4.5-5.5"
+    notes: "Set OLLAMA_CONTEXT_LENGTH=2048; close other GPU apps"
+
+  thoma-reason-7b:
+    description: "Stronger reasoning distill; tight on 6GB"
+    ollama_model: "deepseek-r1:7b"
+    thinking: true
+    context_length: 2048
+    vram_estimate_gb: "4.5-5.5"
+    notes: "Prefer qwen3:4b unless quality insufficient"
+
+default_profile: thoma-reason
+
+pull_order:
+  - qwen3:4b
+  - qwen2.5-coder:3b
+  - qwen2.5:3b
+  - deepseek-r1:1.5b

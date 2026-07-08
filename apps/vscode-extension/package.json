@@ -1,0 +1,230 @@
+{
+  "name": "thoma",
+  "displayName": "thoma",
+  "description": "Self-hosted AI coding assistant — Cursor-style right panel with workspace file context",
+  "version": "0.3.3",
+  "publisher": "thoma",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:thoma.chatView",
+    "onCommand:thoma.focusChat",
+    "onCommand:thoma.addToChat",
+    "onCommand:thoma.explainSelection",
+    "onCommand:thoma.fixSelection",
+    "onCommand:thoma.askAboutFile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "thoma-sidebar",
+          "title": "thoma",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "thoma-sidebar": [
+        {
+          "type": "webview",
+          "id": "thoma.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "thoma.focusChat",
+        "title": "thoma: Open Chat",
+        "category": "thoma",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "thoma.addToChat",
+        "title": "thoma: Add to Chat",
+        "category": "thoma",
+        "icon": "$(add)"
+      },
+      {
+        "command": "thoma.explainSelection",
+        "title": "thoma: Explain Selection",
+        "category": "thoma"
+      },
+      {
+        "command": "thoma.fixSelection",
+        "title": "thoma: Fix Selection",
+        "category": "thoma"
+      },
+      {
+        "command": "thoma.insertAtCursor",
+        "title": "thoma: Insert at Cursor",
+        "category": "thoma"
+      },
+      {
+        "command": "thoma.runInTerminal",
+        "title": "thoma: Run Selection in Terminal",
+        "category": "thoma"
+      },
+      {
+        "command": "thoma.askAboutFile",
+        "title": "thoma: Ask About Active File",
+        "category": "thoma"
+      },
+      {
+        "command": "thoma.planProject",
+        "title": "thoma: Plan Project (workspace)",
+        "category": "thoma"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "thoma.addToChat",
+          "group": "thoma@0"
+        },
+        {
+          "command": "thoma.explainSelection",
+          "when": "editorHasSelection",
+          "group": "thoma@1"
+        },
+        {
+          "command": "thoma.fixSelection",
+          "when": "editorHasSelection",
+          "group": "thoma@2"
+        },
+        {
+          "command": "thoma.runInTerminal",
+          "when": "editorHasSelection",
+          "group": "thoma@3"
+        },
+        {
+          "command": "thoma.askAboutFile",
+          "group": "thoma@4"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "thoma.addToChat",
+          "group": "thoma@1"
+        },
+        {
+          "command": "thoma.planProject",
+          "when": "explorerResourceIsFolder",
+          "group": "thoma@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "thoma.focusChat"
+        },
+        {
+          "command": "thoma.addToChat",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "thoma.explainSelection",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "thoma.fixSelection",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "thoma.askAboutFile",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "thoma.planProject",
+          "when": "workspaceFolderCount > 0"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "thoma.focusChat",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "thoma",
+      "properties": {
+        "thoma.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "thoma API base URL"
+        },
+        "thoma.defaultProfile": {
+          "type": "string",
+          "default": "thoma-reason",
+          "description": "Default model profile"
+        },
+        "thoma.openOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open thoma chat panel on the right when the workspace loads"
+        },
+        "thoma.includeActiveFileByDefault": {
+          "type": "boolean",
+          "default": false,
+          "description": "Attach active editor file to each chat message"
+        },
+        "thoma.maxFileContextLines": {
+          "type": "number",
+          "default": 400,
+          "description": "Max lines per attached file"
+        },
+        "thoma.includeWorkspaceByDefault": {
+          "type": "boolean",
+          "default": true,
+          "description": "Attach workspace tree on first message in a chat"
+        },
+        "thoma.workspaceMaxFiles": {
+          "type": "number",
+          "default": 600,
+          "description": "Max files to index for workspace tree"
+        },
+        "thoma.workspaceMaxContextChars": {
+          "type": "number",
+          "default": 28000,
+          "description": "Max characters for workspace context block"
+        },
+        "thoma.workspaceKeyFileMaxLines": {
+          "type": "number",
+          "default": 180,
+          "description": "Max lines per key file in workspace context"
+        },
+        "thoma.autoApplyFileEdits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically write proposed files to disk (Keep). Set false for manual Review/Keep/Undo."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "marked": "^9.1.6"
+  }
+}

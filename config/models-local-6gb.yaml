@@ -1,0 +1,48 @@
+# Thoma — local GGUF models (no Ollama)
+# Files live in models/gguf/ — download with scripts/download-gguf.py
+
+hardware:
+  backend: cuda
+  platform: nvidia-rtx-4050
+  vram_gb: 6
+  accelerator: cuda
+  inference: llamacpp
+  max_loaded_models: 1
+  default_context: 4096
+
+profiles:
+  thoma-reason:
+    description: "Thinking — Qwen3 4B GGUF"
+    model_file: "Qwen3-4B-Q4_K_M.gguf"
+    thinking: true
+    context_length: 4096
+    memory_estimate_gb: "2.5-3.5"
+
+  thoma-code:
+    description: "Code — Qwen2.5 Coder 3B GGUF"
+    model_file: "qwen2.5-coder-3b-instruct-q4_k_m.gguf"
+    thinking: false
+    context_length: 4096
+    memory_estimate_gb: "2.0-2.5"
+
+  thoma-fast:
+    description: "Fast chat — Qwen2.5 3B GGUF"
+    model_file: "qwen2.5-3b-instruct-q4_k_m.gguf"
+    thinking: false
+    context_length: 4096
+    memory_estimate_gb: "2.0-2.5"
+
+  thoma-reason-lite:
+    description: "Lightweight reasoning distill"
+    model_file: "deepseek-r1-distill-qwen-1.5b-q4_k_m.gguf"
+    thinking: true
+    context_length: 4096
+    memory_estimate_gb: "1.2-1.8"
+
+default_profile: thoma-reason
+
+download_files:
+  - Qwen3-4B-Q4_K_M.gguf
+  - qwen2.5-coder-3b-instruct-q4_k_m.gguf
+  - qwen2.5-3b-instruct-q4_k_m.gguf
+  - deepseek-r1-distill-qwen-1.5b-q4_k_m.gguf

@@ -1,0 +1,27 @@
+# Apple Silicon (MPS/Metal) — Ollama runs natively on macOS host, API in Docker
+# Ollama inside Docker on Mac does NOT use Metal; host Ollama does.
+#
+# Usage:
+#   1. Install Ollama.app or `brew install ollama` and run: ollama serve
+#   2. cp .env.mps.example .env.mps
+#   3. docker compose -f docker-compose.mps.yml --env-file .env.mps up -d --build
+services:
+  thoma-api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: thoma-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - THOMA_API_HOST=${THOMA_API_HOST:-0.0.0.0}
+      - THOMA_API_PORT=${THOMA_API_PORT:-8080}
+      - THOMA_BACKEND=mps
+      - THOMA_DEFAULT_PROFILE=${THOMA_DEFAULT_PROFILE:-thoma-reason}
+      - THOMA_MODELS_CONFIG=${THOMA_MODELS_CONFIG:-/app/config/models-mps-16gb.yaml}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    volumes:
+      - ../config:/app/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -1,0 +1,65 @@
+# Thoma model profiles — Apple Silicon, 8 GB unified memory (M1/M2 base)
+# Ollama on macOS uses Metal (MPS) automatically — no extra env vars needed.
+#
+# Operational rules:
+#   - Run Ollama natively on macOS (not in Docker) for GPU acceleration
+#   - Load ONE profile at a time
+#   - Prefer 3B–4B; 7B only with reduced context
+
+hardware:
+  backend: mps
+  platform: apple-silicon
+  unified_memory_gb: 8
+  accelerator: metal
+  max_loaded_models: 1
+  default_context: 4096
+
+profiles:
+  thoma-reason:
+    description: "Thinking model — planning and agent (MPS)"
+    ollama_model: "qwen3:4b"
+    thinking: true
+    context_length: 4096
+    memory_estimate_gb: "2.5-3.5"
+    priority: primary
+
+  thoma-code:
+    description: "Code generation (MPS)"
+    ollama_model: "qwen2.5-coder:3b"
+    thinking: false
+    context_length: 4096
+    memory_estimate_gb: "2.0-2.5"
+    priority: primary
+
+  thoma-fast:
+    description: "Quick chat (MPS)"
+    ollama_model: "qwen2.5:3b"
+    thinking: false
+    context_length: 4096
+    memory_estimate_gb: "2.0-2.5"
+    priority: primary
+
+  thoma-reason-lite:
+    description: "Lightweight chain-of-thought"
+    ollama_model: "deepseek-r1:1.5b"
+    thinking: true
+    context_length: 4096
+    memory_estimate_gb: "1.2-1.8"
+    priority: fallback
+
+stretch_profiles:
+  thoma-code-7b:
+    description: "7B coder — tight on 8GB unified memory"
+    ollama_model: "qwen2.5-coder:7b"
+    thinking: false
+    context_length: 2048
+    memory_estimate_gb: "4.5-5.5"
+    notes: "Close other apps; may swap to SSD"
+
+default_profile: thoma-reason
+
+pull_order:
+  - qwen3:4b
+  - qwen2.5-coder:3b
+  - qwen2.5:3b
+  - deepseek-r1:1.5b
