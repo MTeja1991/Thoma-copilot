@@ -13,5 +13,9 @@ services:
               capabilities: [gpu]
 
   thoma-api:
+    build:
+      args:
+        INSTALL_LLAMACPP: "0"
     environment:
       - THOMA_BACKEND=nvidia
+      - THOMA_INFERENCE_BACKEND=ollama

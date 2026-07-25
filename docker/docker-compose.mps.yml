@@ -10,18 +10,37 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
+      args:
+        INSTALL_LLAMACPP: "0"
     container_name: thoma-api
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${THOMA_API_PORT:-8080}:8080"
     environment:
-      - THOMA_API_HOST=${THOMA_API_HOST:-0.0.0.0}
-      - THOMA_API_PORT=${THOMA_API_PORT:-8080}
+      - THOMA_ENV=${THOMA_ENV:-production}
+      - THOMA_API_HOST=0.0.0.0
+      - THOMA_API_PORT=8080
       - THOMA_BACKEND=mps
+      - THOMA_INFERENCE_BACKEND=ollama
       - THOMA_DEFAULT_PROFILE=${THOMA_DEFAULT_PROFILE:-thoma-reason}
       - THOMA_MODELS_CONFIG=${THOMA_MODELS_CONFIG:-/app/config/models-mps-16gb.yaml}
+      - THOMA_PROJECT_ROOT=/app
+      - THOMA_DATA_DIR=data
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - THOMA_AUTH_ENABLED=${THOMA_AUTH_ENABLED:-0}
+      - THOMA_API_KEY=${THOMA_API_KEY:-}
+      - THOMA_LOG_LEVEL=${THOMA_LOG_LEVEL:-INFO}
     volumes:
       - ../config:/app/config:ro
+      - thoma_data:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  thoma_data:
