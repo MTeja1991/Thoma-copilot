@@ -19,11 +19,18 @@ class ModelProfile:
     memory_estimate_gb: str
     ollama_model: str = ""
     model_file: str = ""
+    api_model: str = ""
+    api_base: str = ""
+    provider: str = ""
     stretch: bool = False
 
     @property
     def display_model(self) -> str:
-        return self.model_file or self.ollama_model
+        return self.api_model or self.model_file or self.ollama_model
+
+    @property
+    def is_remote(self) -> bool:
+        return bool(self.api_model)
 
 
 @dataclass(frozen=True)
@@ -66,8 +73,11 @@ def get_hardware_info() -> HardwareInfo:
 def _parse_profile(pid: str, spec: dict[str, Any], stretch: bool) -> ModelProfile:
     ollama = str(spec.get("ollama_model", "") or "")
     model_file = str(spec.get("model_file", "") or "")
-    if not ollama and not model_file:
-        raise ValueError(f"Profile {pid} needs model_file or ollama_model")
+    api_model = str(spec.get("api_model", "") or "")
+    api_base = str(spec.get("api_base", "") or "")
+    provider = str(spec.get("provider", "") or "")
+    if not ollama and not model_file and not api_model:
+        raise ValueError(f"Profile {pid} needs model_file, ollama_model, or api_model")
 
     mem = str(spec.get("memory_estimate_gb") or spec.get("vram_estimate_gb", "?"))
     return ModelProfile(
@@ -75,6 +85,9 @@ def _parse_profile(pid: str, spec: dict[str, Any], stretch: bool) -> ModelProfil
         description=spec.get("description", ""),
         ollama_model=ollama,
         model_file=model_file,
+        api_model=api_model,
+        api_base=api_base,
+        provider=provider,
         thinking=bool(spec.get("thinking", False)),
         context_length=int(spec.get("context_length", 4096)),
         memory_estimate_gb=mem,

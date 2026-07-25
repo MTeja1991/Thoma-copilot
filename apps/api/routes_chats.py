@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -32,7 +33,8 @@ class SendMessageRequest(BaseModel):
 
 @router.post("")
 async def create_chat(req: CreateChatRequest) -> dict[str, Any]:
-    return chat_store.create_chat(
+    return await asyncio.to_thread(
+        chat_store.create_chat,
         profile=req.profile,
         title=req.title,
         workspace_root=req.workspace_root,
@@ -44,16 +46,16 @@ async def list_chats(
     limit: int = 50,
     workspace_root: Optional[str] = None,
 ) -> dict[str, Any]:
-    return {
-        "object": "list",
-        "data": chat_store.list_chats(limit=limit, workspace_root=workspace_root),
-    }
+    data = await asyncio.to_thread(
+        chat_store.list_chats, limit=limit, workspace_root=workspace_root
+    )
+    return {"object": "list", "data": data}
 
 
 @router.get("/{chat_id}")
 async def get_chat(chat_id: str) -> dict[str, Any]:
     try:
-        return chat_store.get_chat(chat_id)
+        return await asyncio.to_thread(chat_store.get_chat, chat_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Chat not found") from exc
 
@@ -61,7 +63,7 @@ async def get_chat(chat_id: str) -> dict[str, Any]:
 @router.patch("/{chat_id}")
 async def rename_chat(chat_id: str, req: RenameChatRequest) -> dict[str, str]:
     try:
-        chat_store.set_chat_title(chat_id, req.title)
+        await asyncio.to_thread(chat_store.set_chat_title, chat_id, req.title)
         return {"id": chat_id, "title": req.title}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Chat not found") from exc
@@ -70,7 +72,7 @@ async def rename_chat(chat_id: str, req: RenameChatRequest) -> dict[str, str]:
 @router.delete("/{chat_id}")
 async def delete_chat(chat_id: str) -> dict[str, str]:
     try:
-        chat_store.delete_chat(chat_id)
+        await asyncio.to_thread(chat_store.delete_chat, chat_id)
         return {"status": "deleted", "id": chat_id}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Chat not found") from exc

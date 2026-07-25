@@ -14,14 +14,26 @@ export interface StreamDelta {
 }
 
 export class ThomaClient {
-  constructor(private readonly getApiUrl: () => string) {}
+  constructor(
+    private readonly getApiUrl: () => string,
+    private readonly getApiKey: () => string = () => ""
+  ) {}
 
   private url(path: string): string {
     return `${this.getApiUrl().replace(/\/$/, "")}${path}`;
   }
 
+  private headers(extra: Record<string, string> = {}): Record<string, string> {
+    const headers = { ...extra };
+    const key = this.getApiKey().trim();
+    if (key) {
+      headers.Authorization = `Bearer ${key}`;
+    }
+    return headers;
+  }
+
   async health(): Promise<HealthResponse> {
-    const res = await fetch(this.url("/health"));
+    const res = await fetch(this.url("/health"), { headers: this.headers() });
     if (!res.ok) {
       throw new Error(`Health check failed: ${res.status}`);
     }
@@ -29,7 +41,7 @@ export class ThomaClient {
   }
 
   async listModels(): Promise<ThomaModel[]> {
-    const res = await fetch(this.url("/v1/models"));
+    const res = await fetch(this.url("/v1/models"), { headers: this.headers() });
     if (!res.ok) {
       throw new Error(`List models failed: ${res.status}`);
     }
@@ -40,6 +52,7 @@ export class ThomaClient {
   async switchProfile(profileId: string): Promise<void> {
     const res = await fetch(this.url(`/v1/profiles/${profileId}/switch`), {
       method: "POST",
+      headers: this.headers(),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -54,7 +67,7 @@ export class ThomaClient {
   ): Promise<ThomaChat> {
     const res = await fetch(this.url("/v1/chats"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers({ "Content-Type": "application/json" }),
       body: JSON.stringify({ profile, title, workspace_root: workspaceRoot }),
     });
     if (!res.ok) {
@@ -64,7 +77,7 @@ export class ThomaClient {
   }
 
   async getChat(chatId: string): Promise<ThomaChat> {
-    const res = await fetch(this.url(`/v1/chats/${chatId}`));
+    const res = await fetch(this.url(`/v1/chats/${chatId}`), { headers: this.headers() });
     if (!res.ok) {
       throw new Error(`Get chat failed: ${await res.text()}`);
     }
@@ -76,7 +89,9 @@ export class ThomaClient {
     if (workspaceRoot) {
       params.set("workspace_root", workspaceRoot);
     }
-    const res = await fetch(this.url(`/v1/chats?${params.toString()}`));
+    const res = await fetch(this.url(`/v1/chats?${params.toString()}`), {
+      headers: this.headers(),
+    });
     if (!res.ok) {
       throw new Error(`List chats failed: ${await res.text()}`);
     }
@@ -85,7 +100,10 @@ export class ThomaClient {
   }
 
   async deleteChat(chatId: string): Promise<void> {
-    const res = await fetch(this.url(`/v1/chats/${chatId}`), { method: "DELETE" });
+    const res = await fetch(this.url(`/v1/chats/${chatId}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
     if (!res.ok) {
       throw new Error(`Delete chat failed: ${await res.text()}`);
     }
@@ -114,7 +132,7 @@ export class ThomaClient {
 
     const res = await fetch(this.url("/v1/chat/completions"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
       signal,
     });
@@ -216,6 +234,10 @@ export class ThomaClient {
 
 export function getApiUrl(): string {
   return vscode.workspace.getConfiguration("thoma").get<string>("apiUrl") ?? "http://localhost:8080";
+}
+
+export function getApiKey(): string {
+  return vscode.workspace.getConfiguration("thoma").get<string>("apiKey") ?? "";
 }
 
 export function getDefaultProfile(): string {

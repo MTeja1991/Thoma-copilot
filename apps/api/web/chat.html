@@ -454,6 +454,31 @@
     const emptyChatEl = document.getElementById("emptyChat");
 
     let chatId = null;
+    const API_KEY_STORAGE = "thoma_api_key";
+
+    function apiHeaders(extra = {}) {
+      const headers = { ...extra };
+      const key = sessionStorage.getItem(API_KEY_STORAGE);
+      if (key) headers["Authorization"] = `Bearer ${key}`;
+      return headers;
+    }
+
+    async function apiFetch(url, options = {}) {
+      const opts = {
+        ...options,
+        headers: apiHeaders(options.headers || {}),
+      };
+      let res = await fetch(url, opts);
+      if (res.status === 401 && !sessionStorage.getItem(API_KEY_STORAGE)) {
+        const key = window.prompt("Thoma API key required:");
+        if (key && key.trim()) {
+          sessionStorage.setItem(API_KEY_STORAGE, key.trim());
+          opts.headers = apiHeaders(options.headers || {});
+          res = await fetch(url, opts);
+        }
+      }
+      return res;
+    }
 
     const THINK_PATTERNS = [
       /<think>([\s\S]*?)<\/redacted_thinking>\s*/gi,
@@ -603,7 +628,7 @@
     }
 
     async function streamChatCompletion(body) {
-      const res = await fetch("/v1/chat/completions", {
+      const res = await apiFetch("/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, stream: true }),
@@ -738,7 +763,7 @@
     async function syncAssistantFromServer(expectedUserText) {
       if (!chatId) return;
       for (let attempt = 0; attempt < 8; attempt++) {
-        const res = await fetch(`/v1/chats/${chatId}`);
+        const res = await apiFetch(`/v1/chats/${chatId}`);
         if (!res.ok) return;
         const chat = await res.json();
         const msgs = chat.messages || [];
@@ -772,9 +797,9 @@
     }
 
     async function loadModels() {
-      const health = await fetch("/health").then((r) => r.json());
+      const health = await apiFetch("/health").then((r) => r.json());
       metaEl.textContent = `${health.inference} · ${health.accelerator} · ${health.active_profile}`;
-      const res = await fetch("/v1/models");
+      const res = await apiFetch("/v1/models");
       const data = await res.json();
       profileEl.innerHTML = "";
       data.data.forEach((m) => {
@@ -787,7 +812,7 @@
     }
 
     async function refreshChatList() {
-      const res = await fetch("/v1/chats");
+      const res = await apiFetch("/v1/chats");
       const data = await res.json();
       chatListEl.innerHTML = "";
       data.data.forEach((c) => {
@@ -824,7 +849,7 @@
     async function openChat(id) {
       chatId = id;
       emptyChatEl.classList.add("hidden");
-      const res = await fetch(`/v1/chats/${id}`);
+      const res = await apiFetch(`/v1/chats/${id}`);
       const chat = await res.json();
       loadChatIntoView(chat);
       updateChatChrome(chat.title);
@@ -839,7 +864,7 @@
 
     async function deleteChatById(id, title) {
       if (!confirm(`Delete "${title || "this chat"}"?`)) return;
-      await fetch(`/v1/chats/${id}`, { method: "DELETE" });
+      await apiFetch(`/v1/chats/${id}`, { method: "DELETE" });
       if (chatId === id) {
         chatId = null;
         showEmptyState();
@@ -854,7 +879,7 @@
     }
 
     async function createChat() {
-      const res = await fetch("/v1/chats", {
+      const res = await apiFetch("/v1/chats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile: profileEl.value }),
@@ -871,7 +896,7 @@
     document.getElementById("switchBtn").onclick = async () => {
       statusEl.textContent = "Switching model…";
       try {
-        await fetch(`/v1/profiles/${profileEl.value}/switch`, { method: "POST" });
+        await apiFetch(`/v1/profiles/${profileEl.value}/switch`, { method: "POST" });
         await loadModels();
         statusEl.textContent = "Model switched.";
       } catch (e) {
@@ -924,7 +949,7 @@
       try {
         await loadModels();
         await refreshChatList();
-        const res = await fetch("/v1/chats");
+        const res = await apiFetch("/v1/chats");
         const data = await res.json();
         if (data.data.length) {
           await openChat(data.data[0].id);

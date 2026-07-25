@@ -53,9 +53,10 @@ class OllamaBackend:
         messages: list[dict[str, str]],
         stream: bool = False,
     ) -> dict[str, Any] | AsyncIterator[bytes]:
+        plain = [{"role": m["role"], "content": m.get("content") or ""} for m in messages]
         body: dict[str, Any] = {
             "model": profile.ollama_model,
-            "messages": messages,
+            "messages": plain,
             "stream": stream,
             "options": {"num_ctx": profile.context_length},
         }

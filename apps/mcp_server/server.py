@@ -12,6 +12,8 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 
 API_URL = os.environ.get("THOMA_API_URL", "http://127.0.0.1:8080").rstrip("/")
+API_KEY = os.environ.get("THOMA_API_KEY", "").strip()
+ALLOW_WRITE = os.environ.get("THOMA_MCP_ALLOW_WRITE", "1") == "1"
 WORKSPACE_ROOT = Path(
     os.environ.get("THOMA_WORKSPACE_ROOT", os.environ.get("THOMA_PROJECT_ROOT", Path.cwd()))
 ).resolve()
@@ -38,16 +40,25 @@ DEFAULT_EXCLUDE = {
     "models/gguf",
 }
 
+MAX_WRITE_BYTES = 2 * 1024 * 1024
+
 
 def _resolve_path(rel_path: str) -> Path:
     target = (WORKSPACE_ROOT / rel_path).resolve()
-    if not str(target).startswith(str(WORKSPACE_ROOT)):
+    if target != WORKSPACE_ROOT and WORKSPACE_ROOT not in target.parents:
         raise ValueError(f"Path escapes workspace: {rel_path}")
     return target
 
 
 async def _api_client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(base_url=API_URL, timeout=httpx.Timeout(300.0, connect=10.0))
+    headers: dict[str, str] = {}
+    if API_KEY:
+        headers["Authorization"] = f"Bearer {API_KEY}"
+    return httpx.AsyncClient(
+        base_url=API_URL,
+        timeout=httpx.Timeout(300.0, connect=10.0),
+        headers=headers,
+    )
 
 
 @mcp.tool()
@@ -146,10 +157,22 @@ async def thoma_read_file(path: str, max_lines: int = 400) -> str:
 @mcp.tool()
 async def thoma_write_file(path: str, content: str) -> str:
     """Write a text file relative to the workspace root (creates parent folders)."""
+    if not ALLOW_WRITE:
+        raise PermissionError(
+            "MCP file writes are disabled. Set THOMA_MCP_ALLOW_WRITE=1 to enable."
+        )
+    if "\x00" in content:
+        raise ValueError(f"Refusing to write binary content to {path}")
+    encoded = content.encode("utf-8")
+    if len(encoded) > MAX_WRITE_BYTES:
+        raise ValueError(
+            f"Refusing to write {path} — {len(encoded)} bytes exceeds the "
+            f"{MAX_WRITE_BYTES} byte limit"
+        )
     target = _resolve_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
-    return f"Wrote {path} ({len(content)} bytes)"
+    return f"Wrote {path} ({len(encoded)} bytes)"
 
 
 @mcp.tool()

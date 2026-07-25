@@ -4,7 +4,7 @@ Cursor-style **right-side chat** connected to the local Thoma API — workspace 
 
 ## Prerequisites
 
-1. **Thoma API** on `http://localhost:8080` (see repo root [README](../../README.md))
+1. **Thoma API** on `http://localhost:8080` (see the repo root README.md)
 2. **Node.js 18+**
 
 ## Install in Cursor (recommended)

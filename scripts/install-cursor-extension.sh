@@ -11,6 +11,7 @@ CODE_CLI="$(command -v code || true)"
 
 echo "==> Building extension..."
 cd "$EXT"
+bash "$ROOT/scripts/sync-web-assets.sh"
 npm install --silent
 npm run compile
 npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository

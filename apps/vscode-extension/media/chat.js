@@ -392,7 +392,10 @@
     }
     const parsed = extractThinking(text || streamState.fullText);
     const displayText = parsed.content || streamState.visibleText;
-    const displayThinking = [reasoning, streamState.fullReasoning, parsed.thinking]
+    // `reasoning` (the server's final reasoning_content) and streamState.fullReasoning
+    // (accumulated from the same streamed deltas client-side) cover the same content —
+    // joining both would show the thinking text duplicated.
+    const displayThinking = [reasoning || streamState.fullReasoning, parsed.thinking]
       .filter(Boolean)
       .join("\n\n");
     finalizeThinkingPanel(streamState, displayThinking);
@@ -424,6 +427,8 @@
     setStreamingUI(false);
     scrollToBottom();
   }
+
+  function renderFileEdits(messageId, edits) {
     if (!messageId || !edits || !edits.length) {
       return;
     }
@@ -697,9 +702,14 @@
   };
 
   promptEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      send();
+    if (e.key !== "Enter" || e.isComposing) {
+      return;
     }
+    if (e.shiftKey) {
+      return; // Shift+Enter inserts a newline (default textarea behavior)
+    }
+    e.preventDefault();
+    send();
   });
 
   window.addEventListener("message", (event) => {

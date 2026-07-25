@@ -36,6 +36,8 @@ def _conn():
 
 def init_db() -> None:
     with _conn() as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA synchronous=NORMAL")
         db.executescript(
             """
             CREATE TABLE IF NOT EXISTS chats (
@@ -59,6 +61,12 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_chats_updated ON chats(updated_at DESC);
             """
         )
+
+
+def ping_db() -> None:
+    """Verify SQLite is readable/writable."""
+    with _conn() as db:
+        db.execute("SELECT 1").fetchone()
         cols = {row[1] for row in db.execute("PRAGMA table_info(chats)").fetchall()}
         if "workspace_root" not in cols:
             db.execute("ALTER TABLE chats ADD COLUMN workspace_root TEXT")
@@ -173,12 +181,24 @@ def set_chat_title(chat_id: str, title: str) -> None:
 
 
 def get_messages_for_inference(chat_id: str) -> list[dict[str, str]]:
+    """Load chat turns for inference.
+
+    Includes assistant ``reasoning_content`` when present (needed by remote
+    models that preserve thinking traces across turns). Local backends strip
+    the extra field.
+    """
     with _conn() as db:
         rows = db.execute(
-            "SELECT role, content FROM messages WHERE chat_id = ? ORDER BY id",
+            "SELECT role, content, reasoning FROM messages WHERE chat_id = ? ORDER BY id",
             (chat_id,),
         ).fetchall()
-    return [{"role": r["role"], "content": r["content"]} for r in rows]
+    out: list[dict[str, str]] = []
+    for r in rows:
+        msg: dict[str, str] = {"role": r["role"], "content": r["content"] or ""}
+        if r["role"] == "assistant" and r["reasoning"]:
+            msg["reasoning_content"] = r["reasoning"]
+        out.append(msg)
+    return out
 
 
 def trim_messages(

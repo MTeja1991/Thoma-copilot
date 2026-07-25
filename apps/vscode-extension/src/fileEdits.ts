@@ -12,11 +12,47 @@ export interface ParsedFileEdit {
   status: FileEditStatus;
 }
 
+export interface SkippedFileEdit {
+  path: string;
+  reason: string;
+}
+
+export interface ParseFileEditsResult {
+  edits: Omit<ParsedFileEdit, "status">[];
+  skipped: SkippedFileEdit[];
+}
+
+/** Max size for a single proposed file edit — matches the MCP server's write cap. */
+export const MAX_EDIT_BYTES = 2 * 1024 * 1024;
+
 const FENCE_RE = /```([^\n`]*)\n([\s\S]*?)```/g;
 
+/** Matches the model mistakenly opening a second fence instead of closing the first,
+ * with the file path sandwiched on its own line in between, e.g.:
+ * ```python
+ * src/foo.py
+ * ```python
+ * ...code...
+ * ```
+ * Collapses it into a single well-formed fence with the path on the info line. */
+const NESTED_PATH_FENCE_RE = /```([ \t]*[\w.+-]*)\n([^\n`]+)\n```([ \t]*[\w.+-]*)\n/g;
+
+function denestPathFences(text: string): string {
+  return text.replace(NESTED_PATH_FENCE_RE, (match, lang1, line, lang2) => {
+    const candidate = line.trim();
+    if (!looksLikePath(candidate) || isLanguageTag(candidate)) {
+      return match;
+    }
+    const lang = (lang2 || lang1 || "").trim();
+    return "```" + (lang ? lang + " " : "") + candidate + "\n";
+  });
+}
+
 /** Parse file proposals from assistant markdown. */
-export function parseFileEdits(text: string): Omit<ParsedFileEdit, "status">[] {
+export function parseFileEdits(text: string): ParseFileEditsResult {
+  text = denestPathFences(text);
   const edits: Omit<ParsedFileEdit, "status">[] = [];
+  const skipped: SkippedFileEdit[] = [];
   const seen = new Set<string>();
   const re = new RegExp(FENCE_RE.source, "g");
   let match: RegExpExecArray | null;
@@ -43,6 +79,16 @@ export function parseFileEdits(text: string): Omit<ParsedFileEdit, "status">[] {
       continue;
     }
     seen.add(normalized);
+
+    if (content.includes("\0")) {
+      skipped.push({ path: normalized, reason: "binary content is not supported" });
+      continue;
+    }
+    if (Buffer.byteLength(content, "utf8") > MAX_EDIT_BYTES) {
+      skipped.push({ path: normalized, reason: "proposed file exceeds the 2MB size limit" });
+      continue;
+    }
+
     edits.push({
       id: `${normalized}:${edits.length}`,
       path: normalized,
@@ -52,7 +98,7 @@ export function parseFileEdits(text: string): Omit<ParsedFileEdit, "status">[] {
     });
   }
 
-  return edits;
+  return { edits, skipped };
 }
 
 /** True when the model claims a file was written but nothing was parsed. */
@@ -143,6 +189,28 @@ function normalizeRelPath(p: string): string {
   return p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^[`"']|[`"']$/g, "");
 }
 
+export class PathEscapeError extends Error {
+  constructor(public readonly relPath: string) {
+    super(`Path escapes workspace root: ${relPath}`);
+    this.name = "PathEscapeError";
+  }
+}
+
+/**
+ * Resolve a model-proposed relative path against the workspace root, rejecting
+ * anything that escapes it (e.g. "../../.ssh/authorized_keys") via a real
+ * path-relativity check rather than string prefix matching.
+ */
+export function resolveWithinRoot(root: vscode.Uri, relPath: string): vscode.Uri {
+  const rootFsPath = path.resolve(root.fsPath);
+  const resolved = path.resolve(rootFsPath, relPath);
+  const rel = path.relative(rootFsPath, resolved);
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new PathEscapeError(relPath);
+  }
+  return vscode.Uri.file(resolved);
+}
+
 export function getWorkspaceRoot(): vscode.Uri | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri;
 }
@@ -151,17 +219,29 @@ export function getWorkspaceRootPath(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
+export interface HydrateFileEditsResult {
+  edits: ParsedFileEdit[];
+  skipped: SkippedFileEdit[];
+}
+
 export async function hydrateFileEdits(
   edits: Omit<ParsedFileEdit, "status">[]
-): Promise<ParsedFileEdit[]> {
+): Promise<HydrateFileEditsResult> {
   const root = getWorkspaceRoot();
+  const skipped: SkippedFileEdit[] = [];
   if (!root) {
-    return edits.map((e) => ({ ...e, status: "pending" as const }));
+    return { edits: edits.map((e) => ({ ...e, status: "pending" as const })), skipped };
   }
 
   const hydrated: ParsedFileEdit[] = [];
   for (const edit of edits) {
-    const uri = vscode.Uri.joinPath(root, edit.path);
+    let uri: vscode.Uri;
+    try {
+      uri = resolveWithinRoot(root, edit.path);
+    } catch (err) {
+      skipped.push({ path: edit.path, reason: "path escapes workspace root" });
+      continue;
+    }
     let originalContent = "";
     let isNew = true;
     try {
@@ -178,7 +258,7 @@ export async function hydrateFileEdits(
       status: "pending",
     });
   }
-  return hydrated;
+  return { edits: hydrated, skipped };
 }
 
 export async function ensureParentDirs(root: vscode.Uri, relPath: string): Promise<void> {
@@ -186,7 +266,7 @@ export async function ensureParentDirs(root: vscode.Uri, relPath: string): Promi
   if (!dir || dir === ".") {
     return;
   }
-  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root, dir));
+  await vscode.workspace.fs.createDirectory(resolveWithinRoot(root, dir));
 }
 
 export async function applyFileEdit(edit: ParsedFileEdit): Promise<void> {
@@ -194,7 +274,13 @@ export async function applyFileEdit(edit: ParsedFileEdit): Promise<void> {
   if (!root) {
     throw new Error("Open a workspace folder to apply file changes.");
   }
-  const uri = vscode.Uri.joinPath(root, edit.path);
+  if (edit.content.includes("\0")) {
+    throw new Error(`Refusing to write binary content to ${edit.path}`);
+  }
+  if (Buffer.byteLength(edit.content, "utf8") > MAX_EDIT_BYTES) {
+    throw new Error(`Refusing to write ${edit.path} — exceeds 2MB size limit`);
+  }
+  const uri = resolveWithinRoot(root, edit.path);
   await ensureParentDirs(root, edit.path);
   await vscode.workspace.fs.writeFile(uri, Buffer.from(edit.content, "utf8"));
   const doc = await vscode.workspace.openTextDocument(uri);
@@ -206,7 +292,7 @@ export async function undoFileEdit(edit: ParsedFileEdit): Promise<void> {
   if (!root) {
     return;
   }
-  const uri = vscode.Uri.joinPath(root, edit.path);
+  const uri = resolveWithinRoot(root, edit.path);
   if (edit.isNew) {
     try {
       await vscode.workspace.fs.delete(uri);

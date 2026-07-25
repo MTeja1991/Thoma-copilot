@@ -29,6 +29,10 @@ class LlamaCppBackend:
     def model_ref(self, profile: ModelProfile) -> str:
         return profile.model_file or profile.ollama_model
 
+    @staticmethod
+    def _plain_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+        return [{"role": m["role"], "content": m.get("content") or ""} for m in messages]
+
     def _path_for(self, profile: ModelProfile) -> Path:
         path = resolve_model_path(profile)
         if not path.is_file():
@@ -77,6 +81,7 @@ class LlamaCppBackend:
     ) -> dict[str, Any]:
         self._load_sync(profile)
         assert self._llm is not None
+        messages = self._plain_messages(messages)
 
         kwargs: dict[str, Any] = {
             "messages": messages,
@@ -105,6 +110,7 @@ class LlamaCppBackend:
         try:
             self._load_sync(profile)
             assert self._llm is not None
+            messages = self._plain_messages(messages)
             kwargs: dict[str, Any] = {
                 "messages": messages,
                 "temperature": 0.7,

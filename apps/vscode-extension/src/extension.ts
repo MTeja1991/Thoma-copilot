@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
 import { ChatViewProvider } from "./chatViewProvider";
 import { registerEditorCommands } from "./editorActions";
-import { getApiUrl, ThomaClient } from "./thomaClient";
+import { getApiKey, getApiUrl, ThomaClient } from "./thomaClient";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const client = new ThomaClient(getApiUrl);
+  const client = new ThomaClient(getApiUrl, getApiKey);
   const chatProvider = new ChatViewProvider(context, client);
 
   context.subscriptions.push(

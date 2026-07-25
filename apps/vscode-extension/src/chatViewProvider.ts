@@ -288,7 +288,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async publishFileEdits(messageId: string, content: string): Promise<void> {
-    const parsed = parseFileEdits(content);
+    const { edits: parsed, skipped: parseSkipped } = parseFileEdits(content);
     if (!parsed.length) {
       if (claimsFileWrite(content)) {
         this.post({
@@ -300,9 +300,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           "thoma: model said a file was created, but nothing was written. Look for Proposed changes and click Keep, or re-ask with ```python path/to/file.py on the fence line."
         );
       }
+      if (parseSkipped.length) {
+        this.reportSkippedEdits(parseSkipped);
+      }
       return;
     }
-    const hydrated = await hydrateFileEdits(parsed);
+
+    if (!getWorkspaceRootPath()) {
+      this.post({
+        type: "error",
+        error:
+          "No workspace folder is open — thoma can't write files without one. Use File > Open Folder... and re-ask.",
+      });
+      vscode.window.showWarningMessage(
+        "thoma: open a workspace folder (File > Open Folder…) so proposed file changes have somewhere to write to."
+      );
+      return;
+    }
+
+    const { edits: hydrated, skipped: hydrateSkipped } = await hydrateFileEdits(parsed);
+    const skipped = [...parseSkipped, ...hydrateSkipped];
+    if (skipped.length) {
+      this.reportSkippedEdits(skipped);
+    }
     this.fileEditsByMessage.set(messageId, hydrated);
     this.post({
       type: "fileEdits",
@@ -310,11 +330,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       fileEdits: hydrated.map(toWebviewEdit),
     });
     const autoApply =
-      vscode.workspace.getConfiguration("thoma").get<boolean>("autoApplyFileEdits", true);
-    if (autoApply) {
+      vscode.workspace.getConfiguration("thoma").get<boolean>("autoApplyFileEdits", false);
+    if (autoApply && hydrated.length) {
       await this.acceptAllFileEdits(messageId);
-      this.post({ type: "status", status: `Wrote ${hydrated.length} file(s) to workspace.` });
+    } else if (hydrated.length) {
+      this.post({
+        type: "status",
+        status: `Proposed ${hydrated.length} file(s) — review below and click Keep to write to disk.`,
+      });
     }
+  }
+
+  private reportSkippedEdits(skipped: { path: string; reason: string }[]): void {
+    const summary = skipped.map((s) => `${s.path} (${s.reason})`).join(", ");
+    this.post({ type: "error", error: `Skipped proposed edit(s): ${summary}` });
+    vscode.window.showWarningMessage(`thoma: skipped ${skipped.length} proposed edit(s) — ${summary}`);
   }
 
   private getFileEdit(messageId: string, editId: string): ParsedFileEdit | undefined {
@@ -376,10 +406,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async acceptAllFileEdits(messageId: string): Promise<void> {
     const edits = this.fileEditsByMessage.get(messageId) ?? [];
+    const failures: string[] = [];
+    let succeeded = 0;
     for (const edit of edits) {
-      if (edit.status === "pending") {
-        await this.acceptFileEdit(messageId, edit.id);
+      if (edit.status !== "pending") {
+        continue;
       }
+      try {
+        await applyFileEdit(edit);
+        edit.status = "accepted";
+        succeeded += 1;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        failures.push(`${edit.path}: ${message}`);
+      }
+    }
+    this.syncFileEdits(messageId);
+    if (failures.length) {
+      this.post({
+        type: "status",
+        status: `Wrote ${succeeded} file(s), ${failures.length} failed — ${failures.join("; ")}`,
+      });
+    } else if (succeeded) {
+      this.post({ type: "status", status: `Wrote ${succeeded} file(s) to workspace.` });
     }
   }
 
@@ -784,11 +833,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           Workspace
         </label>
       </div>
-      <textarea id="prompt" placeholder="Ask thoma… (@ file, Explorer right-click, Cmd+Enter to send)"></textarea>
+      <textarea id="prompt" placeholder="Ask thoma… (@ file, Explorer right-click, Enter to send, Shift+Enter for a new line)"></textarea>
       <div class="composer-actions">
         <button id="planBtn" class="secondary">Plan</button>
         <button id="stopBtn" class="stop-btn hidden" title="Stop generation">■ Stop</button>
-        <button id="send">Send ↵</button>
+        <button id="send" title="Send (Enter)">Send ↵</button>
       </div>
     </div>
   </div>

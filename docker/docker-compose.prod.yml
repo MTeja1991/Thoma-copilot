@@ -1,0 +1,14 @@
+# Production overlay — use with base compose:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Auth is off by default (pre-prod). Enable interim API key with THOMA_AUTH_ENABLED=1.
+
+services:
+  thoma-api:
+    environment:
+      - THOMA_ENV=production
+      - THOMA_RATE_LIMIT_RPM=${THOMA_RATE_LIMIT_RPM:-120}
+      - THOMA_TRUST_PROXY=1
+    # Bind to localhost only unless you terminate TLS at a reverse proxy
+    ports:
+      - "127.0.0.1:${THOMA_API_PORT:-8080}:8080"

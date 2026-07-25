@@ -2,7 +2,7 @@
 # Start Thoma with local GGUF models (no Ollama)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "${ROOT}"
 
 UNIFIED_GB="${THOMA_UNIFIED_MEMORY_GB:-16}"
@@ -20,6 +20,7 @@ export THOMA_PROJECT_ROOT="${ROOT}"
 export THOMA_MODELS_DIR=models/gguf
 export THOMA_MODELS_CONFIG="${CONFIG}"
 export THOMA_N_GPU_LAYERS="${THOMA_N_GPU_LAYERS:--1}"
+export THOMA_AUTH_ENABLED="${THOMA_AUTH_ENABLED:-0}"
 
 echo "Thoma local inference (llama.cpp / GGUF)"
 echo "  Config: ${CONFIG}"

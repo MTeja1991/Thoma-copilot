@@ -1,6 +1,6 @@
 # Thoma
 
-Self-hosted coding assistant with **local GGUF models** — no cloud APIs required.
+Self-hosted coding assistant running entirely on **local GGUF models** — no paid hosted API required.
 
 Named after **Thomas** — shows reasoning before acting on your code.
 
@@ -15,6 +15,8 @@ Browser chat (/)            ↗
 Models are downloaded once from Hugging Face into `models/gguf/` and run locally via **llama-cpp-python** (Metal on Mac, CUDA on NVIDIA).
 
 Ollama is **optional** — set `THOMA_INFERENCE_BACKEND=ollama` only if you prefer it.
+
+A generic OpenAI-compatible remote-profile backend still exists in code (`apps/api/backends/openai_backend.py`) for anyone who wants to wire up their own hosted endpoint later, but no hosted profile ships by default — Thoma runs fully local out of the box.
 
 ---
 
@@ -107,7 +109,7 @@ Then **reload Cursor**: `Cmd+Shift+P` → **Developer: Reload Window**
 | `thoma.defaultProfile` | `thoma-reason` | Default model profile |
 | `thoma.openOnStartup` | `true` | Open right panel when workspace loads |
 | `thoma.includeWorkspaceByDefault` | `true` | Attach workspace tree on first message |
-| `thoma.autoApplyFileEdits` | `true` | Write proposed files without clicking Keep |
+| `thoma.autoApplyFileEdits` | `false` | Write proposed files without clicking Keep (off by default — review diffs first) |
 | `thoma.maxFileContextLines` | `400` | Max lines per attached file |
 
 See [apps/vscode-extension/README.md](apps/vscode-extension/README.md) for editor commands and troubleshooting.
@@ -187,13 +189,24 @@ Download manifest: `config/gguf-manifest.yaml`
 
 | Variable | Values | Default |
 |----------|--------|---------|
-| `THOMA_INFERENCE_BACKEND` | `llamacpp`, `ollama` | `llamacpp` |
+| `THOMA_INFERENCE_BACKEND` | `llamacpp`, `ollama`, `openai`, `hybrid` | `llamacpp` |
 | `THOMA_MODELS_CONFIG` | path to yaml | `models-local-mps-16gb.yaml` |
 | `THOMA_PROJECT_ROOT` | repo root | cwd |
 | `THOMA_N_GPU_LAYERS` | `-1` = all GPU layers | `-1` |
 | `THOMA_MODELS_DIR` | GGUF folder | `models/gguf` |
 | `THOMA_API_URL` | MCP / clients | `http://127.0.0.1:8080` |
 | `THOMA_WORKSPACE_ROOT` | MCP file tools scope | `THOMA_PROJECT_ROOT` |
+| `THOMA_ENV` | `development`, `production` | `development` |
+| `THOMA_AUTH_ENABLED` | `1` to enable API key auth | `0` (off) |
+| `THOMA_API_KEY` | Bearer token when auth enabled | (unused) |
+| `THOMA_CORS_ORIGINS` | Comma-separated origins | (none) |
+| `THOMA_RATE_LIMIT_RPM` | Chat requests/min per client | `0` (off) |
+| `THOMA_TRUST_PROXY` | `1` to key rate limiting off `X-Forwarded-For` (set only behind a trusted reverse proxy) | `0` |
+| `THOMA_WORKERS` | Uvicorn worker count | `1` |
+| `THOMA_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING` | `INFO` |
+| `THOMA_MCP_ALLOW_WRITE` | `1` / `0` for MCP file writes | `1` |
+| `OPENAI_API_KEY` | Key for an OpenAI-compatible remote profile, if configured | (unused) |
+| `OPENAI_BASE_URL` | Base URL for that remote profile | `https://api.openai.com/v1` |
 
 **Ollama mode** (optional):
 
@@ -203,6 +216,81 @@ export THOMA_MODELS_CONFIG=config/models-mps-16gb.yaml
 export OLLAMA_BASE_URL=http://localhost:11434
 uvicorn apps.api.main:app --port 8080
 ```
+
+---
+
+## Production deployment
+
+**Pre-prod (now):** auth is **off** by default — no API key or JWT required. Start with:
+
+```bash
+cp .env.example .env
+# THOMA_AUTH_ENABLED=0  (default)
+
+chmod +x docker/scripts/start-prod.sh
+./docker/scripts/start-prod.sh
+```
+
+**Production (later):** JWT auth will replace the interim API-key middleware. Until then, optional API key:
+
+```bash
+export THOMA_AUTH_ENABLED=1
+export THOMA_API_KEY=your-secret
+```
+
+**Health checks**
+
+| Endpoint | Use |
+|----------|-----|
+| `GET /health/live` | Process up (load balancer liveness) |
+| `GET /health/ready` | DB + inference ready (returns 503 if degraded) |
+| `GET /health` | Full status + checks |
+
+**Smoke test**
+
+```bash
+chmod +x scripts/smoke-test.sh
+./scripts/smoke-test.sh
+# with optional API key auth: THOMA_AUTH_ENABLED=1 THOMA_API_KEY=... ./scripts/smoke-test.sh
+```
+
+**Docker (Ollama stack)**
+
+```bash
+cd docker
+cp .env.example .env
+docker compose up -d --build
+# production overlay (localhost bind + prod defaults):
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+**Clients**
+
+- Browser UI, extension, and MCP work without auth in pre-prod
+- When auth is enabled: set `thoma.apiKey` (extension) or `THOMA_API_KEY` (MCP)
+
+**Before internet-facing prod**
+
+- Add JWT (planned) or set `THOMA_AUTH_ENABLED=1` + `THOMA_API_KEY` as interim
+- Set `THOMA_MCP_ALLOW_WRITE=0` unless agents must write files
+- Put TLS in front (Caddy/nginx)
+- Use `THOMA_RATE_LIMIT_RPM=120` to cap chat abuse
+- If you're behind a reverse proxy, set `THOMA_TRUST_PROXY=1` so rate limiting keys off the real client IP (`X-Forwarded-For`) instead of the proxy's
+
+**Tests**
+
+```bash
+pip install -r apps/api/requirements-dev.txt
+python -m pytest apps/api/tests -v
+```
+
+Covers auth (public vs. protected paths, bearer/`X-API-Key` acceptance), rate limiting, and chat session CRUD.
+
+**Known limitations (documented, not yet fixed)**
+
+- Rate limiting is per-worker, in-memory state. If `THOMA_WORKERS` is ever raised above the default of `1`, the effective limit becomes `rpm × workers` since counters aren't shared across workers.
+- No container resource limits (`mem_limit`/`cpus`) are set in the Docker Compose files — a runaway model load can exhaust host memory on a small VPS. Add them manually if hosting on a memory-constrained box.
+- `apps/api/requirements.txt` uses lower-bound version pins only, no lockfile — fine for local dev, but pin exact versions (or generate a lockfile) before relying on reproducible prod builds.
 
 ---
 
