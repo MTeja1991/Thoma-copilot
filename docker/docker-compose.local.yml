@@ -1,32 +1,41 @@
-# Local GGUF stack — API on host with models mounted (no Ollama container)
+# Local GGUF stack — API in Docker with host models mounted (no Ollama container)
 #   docker compose -f docker-compose.local.yml up -d --build
 services:
   thoma-api:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
+      args:
+        INSTALL_LLAMACPP: "1"
     container_name: thoma-api-local
     restart: unless-stopped
     ports:
       - "${THOMA_API_PORT:-8080}:8080"
     environment:
       - THOMA_ENV=${THOMA_ENV:-production}
+      - THOMA_API_HOST=0.0.0.0
+      - THOMA_API_PORT=8080
+      - THOMA_BACKEND=${THOMA_BACKEND:-local}
       - THOMA_INFERENCE_BACKEND=llamacpp
+      - THOMA_DEFAULT_PROFILE=${THOMA_DEFAULT_PROFILE:-thoma-reason}
       - THOMA_MODELS_CONFIG=${THOMA_MODELS_CONFIG:-/app/config/models-local-mps-16gb.yaml}
       - THOMA_PROJECT_ROOT=/app
       - THOMA_DATA_DIR=data
       - THOMA_MODELS_DIR=models/gguf
       - THOMA_N_GPU_LAYERS=${THOMA_N_GPU_LAYERS:--1}
+      - THOMA_AUTH_ENABLED=${THOMA_AUTH_ENABLED:-0}
       - THOMA_API_KEY=${THOMA_API_KEY:-}
+      - THOMA_LOG_LEVEL=${THOMA_LOG_LEVEL:-INFO}
     volumes:
       - ../config:/app/config:ro
       - ../models/gguf:/app/models/gguf:ro
       - thoma_data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/live"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
       interval: 30s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
 volumes:
   thoma_data:
